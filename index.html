@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Anaesthesia Suite Pro</title>
+    
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2864/2864448.png">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background: #f8fafc; }
+        .glass { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); border: 1px solid #e2e8f0; }
+        input, select, textarea { border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; width: 100%; transition: 0.2s; font-size: 14px; background: white; }
+        input:focus { border-color: #2563eb; outline: none; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
+        label { font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; margin-bottom: 4px; display: block; letter-spacing: 0.5px; }
+        .view { display: none; }
+        .view.active { display: block; animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .pill { cursor: pointer; padding: 6px 14px; border-radius: 20px; font-size: 11px; font-weight: 700; border: 1px solid #e2e8f0; background: white; transition: 0.2s; }
+        .pill.active { background: #2563eb; color: white; border-color: #2563eb; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2); }
+        #toast { visibility: hidden; min-width: 250px; background-color: #1e293b; color: #fff; text-align: center; border-radius: 12px; padding: 16px; position: fixed; z-index: 9999; left: 50%; bottom: 30px; transform: translateX(-50%); font-weight: 700; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
+        #toast.show { visibility: visible; animation: fadeinout 2.5s; }
+        @keyframes fadeinout { 0% { bottom: 0; opacity: 0; } 20% { bottom: 30px; opacity: 1; } 80% { bottom: 30px; opacity: 1; } 100% { bottom: 0; opacity: 0; } }
+    </style>
+</head>
+<body>
+
+<div id="toast">Action Confirmed</div>
+
+<div id="app" class="max-w-7xl mx-auto min-h-screen flex flex-col md:flex-row">
+    
+    <nav class="w-full md:w-72 bg-slate-900 text-white p-6 flex flex-col sticky top-0 md:h-screen z-[100] transition-all">
+        <div class="flex justify-between items-start mb-2 md:mb-10">
+            <div>
+                <h1 class="text-2xl md:text-3xl font-black tracking-tighter italic text-blue-400">ANAESPRO</h1>
+                <p id="nav_dr_name" class="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-widest">Loading...</p>
+            </div>
+            <button onclick="toggleNav()" class="md:hidden p-2 text-slate-400 hover:text-white border border-slate-700 rounded-lg">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+            </button>
+        </div>
+
+        <div id="nav_content" class="hidden md:flex flex-col flex-grow space-y-4">
+            <button onclick="changeView('new-case')" class="w-full text-left p-4 rounded-xl hover:bg-slate-800 transition font-bold text-sm border border-transparent hover:border-slate-700">✚ New Case Entry</button>
+            <button onclick="changeView('logbook')" class="w-full text-left p-4 rounded-xl hover:bg-slate-800 transition font-bold text-sm border border-transparent hover:border-slate-700">📋 Clinical Logbook</button>
+            <button onclick="toggleProfile()" class="w-full text-left p-4 rounded-xl border border-slate-700 hover:bg-slate-800 transition font-bold text-sm mt-10">⚙ Profile & Data</button>
+            
+            <div class="pt-6 border-t border-slate-800 mt-auto">
+                <button onclick="exportFullSummary()" class="w-full bg-blue-600 hover:bg-blue-500 p-4 rounded-xl text-xs font-black uppercase shadow-lg transition tracking-widest">Export Summary</button>
+            </div>
+        </div>
+    </nav>
+
+    <main class="flex-grow p-4 md:p-10 pb-24 bg-slate-50 relative z-10">
+        
+        <div id="profile_view" class="hidden mb-10 glass p-6 md:p-8 rounded-3xl shadow-xl border-2 border-blue-500/20">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-black uppercase text-slate-800">Identity & Safety</h2>
+                <button onclick="toggleProfile()" class="text-slate-400 text-2xl hover:text-red-500">&times;</button>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div class="space-y-4">
+                    <label class="text-blue-600 font-black">Personal Details</label>
+                    <div><label>Your Name</label><input type="text" id="cfg_name"></div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div><label>Qualification</label><input type="text" id="cfg_degree"></div>
+                        <div><label>Reg Number</label><input type="text" id="cfg_reg"></div>
+                    </div>
+                    <div><label>Hospital Header (Letterhead)</label><textarea id="cfg_hosp" rows="2"></textarea></div>
+                    <button onclick="saveProfile()" class="w-full bg-slate-900 text-white py-4 rounded-xl font-black text-sm uppercase hover:bg-black transition">Update Profile</button>
+                </div>
+                <div class="space-y-4 bg-slate-50 p-6 rounded-2xl">
+                    <label class="text-red-600 font-black">Data Management</label>
+                    <p class="text-[10px] text-slate-500 font-bold mb-4 uppercase">Always backup your clinical data before clearing browser cache.</p>
+                    <button onclick="backupData()" class="w-full bg-white border border-slate-300 py-3 rounded-lg font-bold text-xs uppercase mb-2 hover:bg-slate-100">📥 Download JSON Backup</button>
+                    <input type="file" id="import_file" class="hidden" onchange="importData(event)">
+                    <button onclick="document.getElementById('import_file').click()" class="w-full bg-white border border-slate-300 py-3 rounded-lg font-bold text-xs uppercase hover:bg-slate-100">📤 Restore from File</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="view-new-case" class="view active max-w-5xl mx-auto">
+            <div class="mb-4 md:mb-8">
+                <h2 class="text-2xl md:text-4xl font-black text-slate-900 tracking-tight">New Clinical Entry</h2>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8">
+                <div class="glass p-5 md:p-8 rounded-3xl space-y-4 md:space-y-5 shadow-sm">
+                    <h3 class="text-xs font-black text-blue-600 border-b pb-2 uppercase tracking-widest">Patient Registry</h3>
+                    <div><label>Patient Full Name</label><input type="text" id="in_name" class="font-bold"></div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div><label>Age</label><input type="number" id="in_age"></div>
+                        <div><label>Sex</label><select id="in_sex"><option>Male</option><option>Female</option><option>Other</option></select></div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div><label>IPD / Case No</label><input type="text" id="in_ipd"></div>
+                        <div><label>Procedure Date</label><input type="date" id="in_date"></div>
+                    </div>
+                </div>
+                <div class="glass p-5 md:p-8 rounded-3xl space-y-4 md:space-y-5 shadow-sm">
+                    <h3 class="text-xs font-black text-blue-600 border-b pb-2 uppercase tracking-widest">Surgical Details</h3>
+                    <div><label>Surgery Performed</label><input type="text" id="in_surgery" list="dl_surgery"></div>
+                    <div><label>Lead Surgeon</label><input type="text" id="in_surgeon" list="dl_surgeon"></div>
+                    <div><label>Anaesthesia Type</label><input type="text" id="in_ana" list="dl_ana"></div>
+                    <div><label>Hospital / Facility</label><input type="text" id="in_hosp" list="dl_hosp"></div>
+                </div>
+            </div>
+            <div class="mt-4 md:mt-8 glass p-6 md:p-10 rounded-[2rem] border-2 border-slate-900 text-center shadow-2xl">
+                <label class="text-slate-400 font-bold mb-2 md:mb-4">Professional Fees (INR)</label>
+                <div class="flex justify-center items-center gap-3">
+                    <span class="text-3xl md:text-5xl font-light text-slate-300">₹</span>
+                    <input type="number" id="in_fee" class="text-5xl md:text-7xl font-black text-slate-900 bg-transparent border-none text-center focus:ring-0 p-0 w-full" placeholder="0">
+                </div>
+            </div>
+            <button onclick="saveCaseRecord()" class="w-full mt-6 md:mt-8 bg-blue-600 text-white py-5 md:py-6 rounded-2xl font-black text-lg md:text-xl shadow-xl hover:bg-blue-700 transition transform active:scale-95">COMMIT CLINICAL RECORD</button>
+        </div>
+
+        <div id="view-logbook" class="view">
+            <div class="flex flex-col md:flex-row justify-between items-end mb-10 gap-4">
+                <div>
+                    <h2 class="text-3xl md:text-4xl font-black text-slate-900 uppercase tracking-tighter">Clinical Logbook</h2>
+                </div>
+                <div class="text-right glass p-6 rounded-2xl border-l-8 border-green-500 w-full md:w-auto">
+                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Revenue Audit</p>
+                    <p id="total_display" class="text-4xl font-black text-slate-900">₹0</p>
+                </div>
+            </div>
+            <div class="glass p-6 rounded-3xl mb-8 flex flex-wrap gap-4 items-center shadow-sm">
+                <div class="flex gap-2 bg-slate-100 p-1.5 rounded-full overflow-x-auto">
+                    <button class="pill active whitespace-nowrap" data-f="all">All</button>
+                    <button class="pill whitespace-nowrap" data-f="daily">Today</button>
+                    <button class="pill whitespace-nowrap" data-f="weekly">Week</button>
+                    <button class="pill whitespace-nowrap" data-f="monthly">Month</button>
+                </div>
+                <input type="text" id="search_bar" oninput="renderLog()" placeholder="Search..." class="flex-grow min-w-[200px] border-slate-200 text-sm">
+            </div>
+            <div id="log_container" class="grid grid-cols-1 lg:grid-cols-2 gap-6"></div>
+        </div>
+    </main>
+
+    <datalist id="dl_surgery"></datalist><datalist id="dl_surgeon"></datalist><datalist id="dl_hosp"></datalist>
+    <datalist id="dl_ana">
+        <option value="Spinal Anaesthesia">
+        <option value="General Anaesthesia (GA)">
+        <option value="Epidural Anaesthesia">
+        <option value="MAC / Sedation">
+    </datalist>
+    <div id="qr_hidden" class="hidden"></div>
+</div>
+
+<script>
+    // --- CORE DATA HANDLING ---
+    let db = JSON.parse(localStorage.getItem('anaes_v5_db')) || [];
+    let profile = JSON.parse(localStorage.getItem('anaes_v5_prof')) || { 
+        name: 'Pritam Raosaheb Desai', 
+        degree: 'MD Anaesthesiology', 
+        reg: 'MCIM I61250A1', 
+        hosp: 'NIRAMAY HOSPITAL, KAGAL' 
+    };
+    let editId = null;
+    let timeFilter = 'all';
+
+    function initUI() {
+        document.getElementById('cfg_name').value = profile.name;
+        document.getElementById('cfg_degree').value = profile.degree;
+        document.getElementById('cfg_reg').value = profile.reg;
+        document.getElementById('cfg_hosp').value = profile.hosp;
+        document.getElementById('nav_dr_name').innerText = `Dr. ${profile.name.toUpperCase()}`;
+        document.getElementById('in_date').valueAsDate = new Date();
+        updateDatalists();
+        
+        document.querySelectorAll('.pill').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+                btn.classList.add('active');
+                timeFilter = btn.dataset.f;
+                renderLog();
+            });
+        });
+    }
+
+    // --- NAVIGATION TOGGLE ---
+    function toggleNav() {
+        const nav = document.getElementById('nav_content');
+        nav.classList.toggle('hidden');
+    }
+
+    // --- PWA REGISTRATION ---
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js')
+                .then(reg => console.log('SW Active'))
+                .catch(err => console.log('SW Error', err));
+        });
+    }
+
+    function showToast(msg) {
+        const t = document.getElementById("toast");
+        t.innerText = msg; t.className = "show";
+        setTimeout(() => { t.className = t.className.replace("show", ""); }, 2500);
+    }
+
+    function toggleProfile() { 
+        document.getElementById('profile_view').classList.toggle('hidden'); 
+        // Close nav if open on mobile
+        if(window.innerWidth < 768) document.getElementById('nav_content').classList.add('hidden');
+    }
+
+    function saveProfile() {
+        profile = {
+            name: document.getElementById('cfg_name').value.replace(/^Dr\.\s*/i, ""),
+            degree: document.getElementById('cfg_degree').value,
+            reg: document.getElementById('cfg_reg').value,
+            hosp: document.getElementById('cfg_hosp').value
+        };
+        localStorage.setItem('anaes_v5_prof', JSON.stringify(profile));
+        document.getElementById('nav_dr_name').innerText = `Dr. ${profile.name.toUpperCase()}`;
+        toggleProfile();
+        showToast("Profile Updated");
+    }
+
+    function changeView(v) {
+        document.querySelectorAll('.view').forEach(view => view.classList.remove('active'));
+        document.getElementById(`view-${v}`).classList.add('active');
+        if(v === 'logbook') renderLog();
+        // Close nav on mobile after selection
+        if(window.innerWidth < 768) document.getElementById('nav_content').classList.add('hidden');
+    }
+
+    function saveCaseRecord() {
+        const nameVal = document.getElementById('in_name').value;
+        if(!nameVal) { showToast("Name Required"); return; }
+        
+        const data = {
+            id: editId || Date.now(),
+            name: nameVal.toUpperCase(),
+            age: document.getElementById('in_age').value,
+            sex: document.getElementById('in_sex').value,
+            ipd: document.getElementById('in_ipd').value,
+            date: document.getElementById('in_date').value,
+            surgery: document.getElementById('in_surgery').value,
+            surgeon: document.getElementById('in_surgeon').value.replace(/^Dr\.\s*/i, ""),
+            ana: document.getElementById('in_ana').value,
+            hosp: document.getElementById('in_hosp').value,
+            fee: parseFloat(document.getElementById('in_fee').value || 0)
+        };
+
+        if(editId) {
+            const idx = db.findIndex(x => x.id === editId);
+            db[idx] = data; editId = null;
+        } else { db.push(data); }
+
+        localStorage.setItem('anaes_v5_db', JSON.stringify(db));
+        resetForm(); updateDatalists(); changeView('logbook');
+        showToast("Record Committed");
+    }
+
+    function renderLog() {
+        const query = document.getElementById('search_bar').value.toLowerCase();
+        const now = new Date();
+        const filtered = db.filter(c => {
+            const cDate = new Date(c.date);
+            const matchesQuery = c.name.toLowerCase().includes(query) || c.hosp.toLowerCase().includes(query) || c.surgeon.toLowerCase().includes(query);
+            if(!matchesQuery) return false;
+            if(timeFilter === 'daily') return c.date === now.toISOString().split('T')[0];
+            if(timeFilter === 'weekly') return ((now - cDate) / 86400000) <= 7;
+            if(timeFilter === 'monthly') return cDate.getMonth() === now.getMonth() && cDate.getFullYear() === now.getFullYear();
+            return true;
+        });
+
+        document.getElementById('total_display').innerText = `₹${filtered.reduce((s,c) => s + c.fee, 0)}`;
+        document.getElementById('log_container').innerHTML = filtered.sort((a,b) => b.id - a.id).map(c => `
+            <div class="glass p-8 rounded-3xl border-l-8 border-blue-600 shadow-sm">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h4 class="font-black text-slate-800 text-xl tracking-tight">${c.name}</h4>
+                        <p class="text-[10px] text-blue-600 font-black uppercase tracking-widest mt-1">${c.date} • ${c.surgery}</p>
+                    </div>
+                    <p class="text-3xl font-black text-slate-900">₹${c.fee}</p>
+                </div>
+                <div class="grid grid-cols-2 gap-2 mt-4">
+                    <div class="bg-slate-50 p-3 rounded-xl text-[9px] font-bold text-slate-500 uppercase">Dr. ${c.surgeon}</div>
+                    <div class="bg-slate-50 p-3 rounded-xl text-[9px] font-bold text-slate-500 uppercase">${c.hosp}</div>
+                </div>
+                <div class="flex gap-2 mt-6">
+                    <button onclick="editCase(${c.id})" class="flex-1 py-3 rounded-xl bg-slate-100 text-[10px] font-black uppercase">Edit</button>
+                    <button onclick="deleteCase(${c.id})" class="flex-1 py-3 rounded-xl bg-red-50 text-red-600 text-[10px] font-black uppercase">Delete</button>
+                    <button onclick="generateReceiptPDF(${c.id})" class="flex-[2] py-3 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase shadow-lg">Receipt PDF</button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    // --- PDF GENERATORS (FIXED) ---
+    async function generateReceiptPDF(id) {
+        showToast("Generating Receipt...");
+        const c = db.find(x => x.id === id);
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF('p', 'mm', 'a5');
+        
+        doc.setFontSize(14); doc.setFont("helvetica", "bold");
+        doc.text(profile.hosp.toUpperCase(), 74, 20, {align:'center'});
+        doc.line(10, 25, 138, 25);
+
+        doc.autoTable({
+            startY: 35,
+            body: [
+                ['PATIENT', c.name], 
+                ['IPD NO', c.ipd || '-'], 
+                ['SURGERY', c.surgery], 
+                ['SURGEON', 'Dr. ' + c.surgeon], 
+                ['ANAESTHESIA', c.ana], 
+                ['FEES', 'INR ' + c.fee]
+            ],
+            theme: 'plain', styles: { fontSize: 10, fontStyle: 'bold' },
+            columnStyles: { 0: { cellWidth: 35, textColor: [100, 100, 100] } }
+        });
+
+        const finalY = doc.lastAutoTable.finalY + 15;
+        doc.setFillColor(241, 245, 249); doc.rect(10, finalY, 128, 12, 'F');
+        doc.setFontSize(11); doc.text(`TOTAL RECEIVED: INR ${c.fee}/-`, 15, finalY + 8);
+
+        const qrStage = document.getElementById("qr_hidden");
+        qrStage.innerHTML = "";
+        new QRCode(qrStage, { text: `CASE-ID-${c.id}`, width: 100, height: 100 });
+
+        setTimeout(() => {
+            const qrImg = qrStage.querySelector('canvas').toDataURL("image/png");
+            doc.addImage(qrImg, 'PNG', 10, finalY + 20, 18, 18);
+            doc.setFontSize(10); doc.text(`Dr. ${profile.name}`, 135, finalY + 30, {align: 'right'});
+            doc.setFontSize(7); doc.text(`${profile.degree} | Reg: ${profile.reg}`, 135, finalY + 35, {align: 'right'});
+            doc.save(`${c.name}_Receipt.pdf`);
+        }, 500);
+    }
+
+    function exportFullSummary() {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF('l', 'mm', 'a4');
+        const now = new Date();
+        const filtered = db.filter(c => {
+            const cDate = new Date(c.date);
+            if(timeFilter === 'daily') return c.date === now.toISOString().split('T')[0];
+            if(timeFilter === 'weekly') return ((now - cDate) / 86400000) <= 7;
+            if(timeFilter === 'monthly') return cDate.getMonth() === now.getMonth();
+            return true;
+        });
+
+        doc.setFontSize(18); doc.setFont("helvetica", "bold");
+        doc.text("CLINICAL LOGBOOK SUMMARY", 148, 15, {align:'center'});
+        
+        doc.autoTable({
+            startY: 25,
+            head: [['Date', 'Patient Name', 'Age/Sex', 'Surgery', 'Anaesthesia', 'Surgeon', 'Hospital', 'Charges']],
+            body: filtered.map(c => [c.date, c.name, `${c.age}/${c.sex}`, c.surgery, c.ana, 'Dr. ' + c.surgeon, c.hosp, c.fee]),
+            theme: 'grid',
+            headStyles: { fillColor: [15, 23, 42] },
+            foot: [['', '', '', '', '', '', 'TOTAL:', `INR ${filtered.reduce((s,c) => s + c.fee, 0)}`]],
+            footStyles: { fillColor: [241, 245, 249], textColor: [0,0,0], fontStyle: 'bold' }
+        });
+
+        doc.save(`Clinical_Summary_${timeFilter}.pdf`);
+    }
+
+    // --- DATA UTILS ---
+    function backupData() {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db));
+        const dl = document.createElement('a');
+        dl.setAttribute("href", dataStr); dl.setAttribute("download", `anaespro_backup_${Date.now()}.json`);
+        document.body.appendChild(dl); dl.click(); dl.remove();
+        showToast("Backup Downloaded");
+    }
+
+    function importData(e) {
+        const file = e.target.files[0];
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            db = JSON.parse(event.target.result);
+            localStorage.setItem('anaes_v5_db', JSON.stringify(db));
+            renderLog(); showToast("Data Restored");
+        };
+        reader.readAsText(file);
+    }
+
+    function deleteCase(id) {
+        if(confirm("Permanently delete this record?")) {
+            db = db.filter(x => x.id !== id);
+            localStorage.setItem('anaes_v5_db', JSON.stringify(db));
+            renderLog();
+        }
+    }
+
+    function editCase(id) {
+        const c = db.find(x => x.id === id);
+        editId = id;
+        document.getElementById('in_name').value = c.name;
+        document.getElementById('in_age').value = c.age;
+        document.getElementById('in_sex').value = c.sex;
+        document.getElementById('in_ipd').value = c.ipd;
+        document.getElementById('in_date').value = c.date;
+        document.getElementById('in_surgery').value = c.surgery;
+        document.getElementById('in_surgeon').value = c.surgeon;
+        document.getElementById('in_ana').value = c.ana;
+        document.getElementById('in_hosp').value = c.hosp;
+        document.getElementById('in_fee').value = c.fee;
+        changeView('new-case');
+    }
+
+    function resetForm() {
+        document.querySelectorAll('#view-new-case input:not([type="date"])').forEach(i => i.value = '');
+    }
+
+    function updateDatalists() {
+        const fill = (id, key) => {
+            const list = [...new Set(db.map(x => x[key]))].filter(x => x);
+            document.getElementById(id).innerHTML = list.map(v => `<option value="${v}">`).join('');
+        };
+        fill('dl_surgery', 'surgery'); fill('dl_surgeon', 'surgeon'); fill('dl_hosp', 'hosp');
+    }
+
+    window.addEventListener('DOMContentLoaded', initUI);
+</script>
+</body>
+</html>
